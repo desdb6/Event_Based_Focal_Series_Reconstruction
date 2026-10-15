@@ -7,7 +7,6 @@ Last modified: 14/10/2026
 """
 
 import numpy as np
-import torch
 import imageio.v3 as iio
 import matplotlib.pyplot as plt
 from skimage.transform import resize
@@ -53,7 +52,10 @@ class Specimen():
         self.amp_image()
         self.owf = self.phase * self.amp
 
+        self.shape = self.owf.shape
         self.frequency_grid()
+        self.real_space_grid()
+        
 
     def phase_image(self):
         """Generate a phase image."""
@@ -65,7 +67,7 @@ class Specimen():
             img = np.zeros_like(amp)
         if self.resize_img is not None: # Resize so phase and amplitude are the same size
             img = resize(img, (self.resize_img, self.resize_img), anti_aliasing=True)
-        img = np.pad(img,((self.pad,self.pad),(self.pad,self.pad)))[::-1]
+        img = np.pad(img,((self.pad,self.pad),(self.pad,self.pad)), constant_values=0)[::-1]
         img = np.rot90(img,2)
         self.phase = np.exp(1j*img)
 
@@ -79,20 +81,23 @@ class Specimen():
             img = np.ones_like(phase)
         if self.resize_img is not None: # Resize so phase and amplitude are the same size
             img = resize(img, (self.resize_img, self.resize_img), anti_aliasing=True)
-        img = np.pad(img,((self.pad,self.pad),(self.pad,self.pad)))[::-1]
+        img = np.pad(img,((self.pad,self.pad),(self.pad,self.pad)), constant_values=1)[::-1]
         img = np.rot90(img,2)
         self.amp = img
 
-    def frequency_grid(self) -> np.ndarray:
-        """Spatial frequency magnitude |k| for each Fourier pixel (1/length unit).
- 
-        Matches np.fft.fft2 layout; use centered=True if your fft2d
-        applies fftshift. Feed this straight into the CTF.
-        """
-        ky = np.fft.fftfreq(self.owf.shape[0], d=self.pixel_size)
-        kx = np.fft.fftfreq(self.owf.shape[1], d=self.pixel_size)
-        k = np.hypot(*np.meshgrid(ky, kx, indexing="ij"))
-        self.k_grid = np.fft.fftshift(k)
+    def real_space_grid(self):
+        """Generate real-space coordinate grids."""
+        ny, nx = self.shape
+        self.y = (np.arange(ny) - ny // 2) * self.pixel_size
+        self.x = (np.arange(nx) - nx // 2) * self.pixel_size
+        self.Y, self.X = np.meshgrid(self.y, self.x, indexing="ij")
+
+    def frequency_grid(self):
+        """Generate reciprocal-space frequency grids."""
+        self.ky = np.fft.fftshift(np.fft.fftfreq(self.shape[0], d=self.pixel_size))
+        self.kx = np.fft.fftshift(np.fft.fftfreq(self.shape[1], d=self.pixel_size))
+        self.K_Y, self.K_X = np.meshgrid(self.ky, self.kx, indexing="ij")
+        self.k_grid = np.hypot(self.K_X, self.K_Y)
 
 if __name__ ==  "__main__":
     spec = Specimen(phase_source='images/lena_1.jpg', phase_strength=0.01, resize_img=512, pixel_size=2)
