@@ -6,6 +6,7 @@ Email: des.deborger@student.uantwerpen.be
 Last modified: 14/10/2026
 """
 
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -123,3 +124,57 @@ def plot_2d(img, mode="abs", x=None, y=None, extent=None, cmap="gray",
     if save:
         ax.figure.savefig(save, dpi=300, bbox_inches="tight")
     return ax
+
+
+def plot_focal_series(focal_series, defoci=None, ncols=None, step=1,
+                      shared_scale=True, figsize_per_panel=2.5,
+                      suptitle="", save=None, **plot_kwargs):
+    """Plot a focal series as a grid of images.
+
+    focal_series : array of shape (N, H, W), defocus along axis 0
+    defoci       : optional length-N array, used for the panel titles
+    ncols        : columns in the grid (default: roughly square layout)
+    step         : show every `step`-th image, useful for long series
+    shared_scale : use one vmin/vmax for all panels so contrast is
+                   comparable between defoci
+    **plot_kwargs: passed to plot_2d (cmap, x, y, extent, log, ...)
+    """
+    focal_series = to_numpy(focal_series)
+    if focal_series.ndim != 3:
+        raise ValueError(f"Expected (N, H, W), got shape {focal_series.shape}.")
+
+    idx = np.arange(0, focal_series.shape[0], step)
+    n = len(idx)
+    ncols = ncols or math.ceil(math.sqrt(n))
+    nrows = math.ceil(n / ncols)
+
+    if shared_scale:
+        plot_kwargs.setdefault("vmin", focal_series[idx].min())
+        plot_kwargs.setdefault("vmax", focal_series[idx].max())
+
+    # no coordinates given -> pixel ticks on every panel are just clutter
+    has_coords = any(plot_kwargs.get(k) is not None for k in ("x", "y", "extent"))
+
+    fig, axes = plt.subplots(nrows, ncols,
+                             figsize=(ncols * figsize_per_panel,
+                                      nrows * figsize_per_panel),
+                             squeeze=False)
+    axes = axes.ravel()
+
+    for ax, i in zip(axes, idx):
+        title = f"Δf = {defoci[i]:.0f}nm" if defoci is not None else f"#{i}"
+        plot_2d(focal_series[i], ax=ax, title=title, colorbar=False, **plot_kwargs)
+        if not has_coords:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    for ax in axes[n:]:          # hide unused panels
+        ax.axis("off")
+
+    if suptitle:
+        fig.suptitle(suptitle)
+    fig.tight_layout()
+
+    if save:
+        fig.savefig(save, dpi=300, bbox_inches="tight")
+    return fig, axes[:n]

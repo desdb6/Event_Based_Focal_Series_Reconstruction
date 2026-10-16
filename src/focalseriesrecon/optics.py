@@ -53,6 +53,11 @@ def spatial_coherence_envelope(k_grid: np.ndarray, wavelength: float, defocus: f
     return np.exp(-(np.pi * alpha / wavelength) ** 2 * grad ** 2)
 
 
+def aperture_grid(k_grid: np.ndarray, wavelength: float, alpha_max: float) -> np.ndarray:
+    """Generate an aperture mask to cut off maximal k values."""
+    return (k_grid < alpha_max/(wavelength * 1000)).astype(float)
+
+
 def forward_linear(owf: np.ndarray, k_grid: np.ndarray, wavelength: float, defocus: float, cs: float, alpha_max: float = None, sc_alpha: float = None) -> np.ndarray:
     """Generate the detected linear intensity in the limit of a small phase and amplitude modulation."""
     x0 = 2 * fft2d(np.real(owf - 1))
@@ -76,9 +81,12 @@ def forward_nonlinear(owf: np.ndarray, k_grid: np.ndarray, wavelength: float, de
     return np.abs(ifft2d(H0 * fft2d(owf))) ** 2
 
 
-def aperture_grid(k_grid: np.ndarray, wavelength: float, alpha_max: float) -> np.ndarray:
-    """Generate an aperture mask to cut off maximal k values."""
-    return (k_grid < alpha_max/(wavelength * 1000)).astype(float)
+def focal_series_nonlinear(defoci: np.ndarray, owf: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float = None) -> np.ndarray:
+    """Generate a defocus series of images."""
+    return np.stack([
+        forward_nonlinear(owf, k_grid, wavelength, df, cs, alpha_max)
+        for df in defoci
+    ])
 
 
 if __name__ == "__main__":
