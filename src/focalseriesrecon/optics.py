@@ -89,6 +89,14 @@ def focal_series_nonlinear(defoci: np.ndarray, owf: np.ndarray, k_grid: np.ndarr
     ])
 
 
+def poisson_noise(defocus_series: np.ndarray, dose_per_pixel: int, seed: int = None) -> np.ndarray:
+    """Apply poisson noise to a defocus series."""
+    rng = np.random.default_rng(seed)
+    counts = np.clip(defocus_series, 0, None) * dose_per_pixel
+    noisy = rng.poisson(counts) / dose_per_pixel
+    return noisy
+
+
 if __name__ == "__main__":
     wavelength = electron_wavelength(ACC_V)
 
