@@ -41,9 +41,20 @@ def phase_error(k: float, wavelength: float, defocus: float, cs: float) -> np.fl
     return np.pi * wavelength * k**2 * (cs * wavelength**2 * k**2 / 2 + defocus)
 
 
+def phase_error_astig(kx: float, ky: float, wavelength: float, defocus_x: float, defocus_y: float, cs: float) -> np.float64:
+    """Aberration function chi(k) for anisotropic defocus in x and y directions (astigmatism)."""
+    k = np.sqrt(kx ** 2 + ky ** 2)
+    return np.pi * wavelength * (kx**2 * defocus_x + ky**2 * defocus_y) + np.pi / 2 * cs * wavelength**3 * k**4
+
+
 def ctf_complex(k: float, wavelength: float, defocus: float, cs: float) -> np.complex128:
     """Complex coherent transfer function exp(i*chi)."""
     return np.exp(-1j * phase_error(k, wavelength, defocus, cs))
+
+
+def ctf_complex_astig(kx: float, ky: float, wavelength: float, defocus_x: float, defocus_y: float, cs: float) -> np.complex128:
+    """Complex coherent transfer function exp(i*chi)for anisotropic defocus in x and y directions (astigmatism)."""
+    return np.exp(-1j * phase_error_astig(kx, ky, wavelength, defocus_x, defocus_y, cs))
 
 
 def spatial_coherence_envelope(k_grid: np.ndarray, wavelength: float, defocus: float, cs: float, alpha_mrad: float) -> np.ndarray:
@@ -81,12 +92,28 @@ def forward_nonlinear(owf: np.ndarray, k_grid: np.ndarray, wavelength: float, de
     return np.abs(ifft2d(H0 * fft2d(owf))) ** 2
 
 
+def forward_nonlinear_astig(owf: np.ndarray, k_grid: np.ndarray, kx_grid: np.ndarray, ky_grid: np.ndarray, wavelength: float, defocus_x: float, defocus_y: float, cs: float, alpha_max: float = None) -> np.ndarray:
+    """Generate the detected intensity."""
+    H0 = ctf_complex_astig(kx_grid, ky_grid, wavelength, defocus_x, defocus_y, cs)
+    if alpha_max is not None:
+        H0 = H0 * aperture_grid(k_grid, wavelength, alpha_max)
+    return np.abs(ifft2d(H0 * fft2d(owf))) ** 2
+
+
 def focal_series_nonlinear(defoci: np.ndarray, owf: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float = None) -> np.ndarray:
     """Generate a defocus series of images."""
     return np.stack([
         forward_nonlinear(owf, k_grid, wavelength, df, cs, alpha_max)
         for df in defoci
     ])
+
+
+def focal_series_astig(defoci_x: float, defoci_y: float, owf: np.ndarray, k_grid: np.ndarray, kx_grid: np.ndarray, ky_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float = None):
+    """Generate an astigmatic defocus series of images."""
+    return np.stack([
+            forward_nonlinear_astig(owf, k_grid, kx_grid, ky_grid, wavelength, dfx, dfy, cs, alpha_max)
+            for dfx, dfy in zip(defoci_x, defoci_y)
+        ])
 
 
 def poisson_noise(defocus_series: np.ndarray, dose_per_pixel: int, seed: int = None) -> np.ndarray:

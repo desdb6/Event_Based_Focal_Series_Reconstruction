@@ -9,7 +9,7 @@ Last modified: 14/10/2026
 import numpy as np
 import matplotlib.pyplot as plt
 
-from optics import phase_error, ctf_complex, aperture_grid, fft2d, ifft2d
+from optics import phase_error, ctf_complex, ctf_complex_astig, aperture_grid, fft2d, ifft2d
 from utils import *
 
 def ctf_sum_squares(defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float) -> np.ndarray:
@@ -20,7 +20,7 @@ def ctf_sum_squares(defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, c
     return sum_grid
 
 
-def filter_function(defocus: float, defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float, reg: float=1e-12) -> np.ndarray:
+def filter_function_linear(defocus: float, defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float, reg: float=1e-12) -> np.ndarray:
     """Generate a filter function for a specific defocus in a defocus series."""
     N = len(defoci)
     aperture = aperture_grid(k_grid, wavelength, alpha_max)
@@ -33,16 +33,20 @@ def filter_function(defocus: float, defoci: np.ndarray, k_grid: np.ndarray, wave
     return numerator / denominator * aperture
 
 
-def filter_function_approx(defocus: float, defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float):
+def filter_function_approx_linear(defocus: float, defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float):
     """Generate an approximate filter function for a specific defocus in a defocus series."""
     N=len(defoci)
     return np.conj(ctf_complex(k_grid, wavelength, defocus, cs)) * aperture_grid(k_grid, wavelength, alpha_max) / N
 
 
+def filter_function_fbp(defocus_x: float, defocus_y: float, k_grid: np.ndarray, kx_grid: np.ndarray, ky_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float):
+    """Generate a filtered backprojection kernel for an astigmatic image. (test, not sure about the generalisation of this expression)"""
+    return k_grid * np.conj(ctf_complex_astig(kx_grid, ky_grid, wavelength, defocus_x, defocus_y, cs)) * aperture_grid(k_grid, wavelength, alpha_max)
+
 def linear_reconstruction(defocus_series: np.ndarray, defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float, reg: float=1e-12) -> np.ndarray:
     """Linear reconstruction of defocus series"""
     filter_functions = np.stack([
-        filter_function(defocus, defoci, k_grid, wavelength, cs, alpha_max, reg)
+        filter_function_linear(defocus, defoci, k_grid, wavelength, cs, alpha_max, reg)
         for defocus in defoci
     ])
     reconstructed_owf_g = np.sum(fft2d(defocus_series) * filter_functions, axis=0)

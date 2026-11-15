@@ -34,6 +34,15 @@ def normalize(img, minmax):
         img = img / rng
     img = img * (minmax[1] - minmax[0]) + minmax[0]
     return img
+
+
+def meshflatten(defoci_x, defoci_y):
+    """Make every combination between two sereis of defoci values"""
+    DFX, DFY = np.meshgrid(defoci_x, defoci_y, indexing="ij")
+    defoci_x = DFX.ravel()
+    defoci_y = DFY.ravel()
+    return defoci_x, defoci_y
+
  
 def plot_1d(y, x=None, label=None, xlabel="", ylabel="", title="",
             ax=None, save=None, **kwargs):
@@ -126,33 +135,58 @@ def plot_2d(img, mode="abs", x=None, y=None, extent=None, cmap="gray",
     return ax
 
 
-def plot_focal_series(focal_series, defoci=None, ncols=None, step=1,
+def plot_focal_series(focal_series, defoci=None, defoci_y=None, ncols=None, step=1,
                       shared_scale=True, figsize_per_panel=2.5,
                       suptitle="", save=None, **plot_kwargs):
     """Plot a focal series as a grid of images.
 
-    focal_series : array of shape (N, H, W), defocus along axis 0
-    defoci       : optional length-N array, used for the panel titles
-    ncols        : columns in the grid (default: roughly square layout)
-    step         : show every `step`-th image, useful for long series
-    shared_scale : use one vmin/vmax for all panels so contrast is
-                   comparable between defoci
+    focal_series : (N, H, W)       series along a path (defocus along axis 0), or
+                   (Nx, Ny, H, W)  full astigmatic grid, rows = defocus_x, columns = defocus_y
+    defoci       : defocus_x values (length N, or Nx for a 4D series). If defoci_y
+                   is None, it is treated as an isotropic defocus.
+    defoci_y     : defocus_y values (length N, or Ny for a 4D series)
+    ncols        : columns in the grid (3D only; default: roughly square layout)
+    step         : show every `step`-th image (per axis for 4D)
+    shared_scale : one vmin/vmax for all panels
     **plot_kwargs: passed to plot_2d (cmap, x, y, extent, log, ...)
     """
     focal_series = to_numpy(focal_series)
-    if focal_series.ndim != 3:
-        raise ValueError(f"Expected (N, H, W), got shape {focal_series.shape}.")
+    if focal_series.ndim not in (3, 4):
+        raise ValueError(f"Expected (N, H, W) or (Nx, Ny, H, W), got shape {focal_series.shape}.")
 
-    idx = np.arange(0, focal_series.shape[0], step)
-    n = len(idx)
-    ncols = ncols or math.ceil(math.sqrt(n))
-    nrows = math.ceil(n / ncols)
+    def fmt(dfx, dfy):
+        if dfx is None:
+            return None
+        if dfy is None:
+            return f"Δf = {dfx:.0f}nm"
+        return f"Δfx = {dfx:.0f}, Δfy = {dfy:.0f}nm"
 
+    panels = []  # (image, title)
+    if focal_series.ndim == 4:
+        ix = np.arange(0, focal_series.shape[0], step)
+        iy = np.arange(0, focal_series.shape[1], step)
+        for i in ix:
+            for j in iy:
+                dfx = defoci[i] if defoci is not None else None
+                dfy = defoci_y[j] if defoci_y is not None else None
+                panels.append((focal_series[i, j], fmt(dfx, dfy) or f"#{i},{j}"))
+        ncols, nrows = len(iy), len(ix)
+    else:
+        idx = np.arange(0, focal_series.shape[0], step)
+        for i in idx:
+            dfx = defoci[i] if defoci is not None else None
+            dfy = defoci_y[i] if defoci_y is not None else None
+            panels.append((focal_series[i], fmt(dfx, dfy) or f"#{i}"))
+        n = len(idx)
+        ncols = ncols or math.ceil(math.sqrt(n))
+        nrows = math.ceil(n / ncols)
+
+    n = len(panels)
     if shared_scale:
-        plot_kwargs.setdefault("vmin", focal_series[idx].min())
-        plot_kwargs.setdefault("vmax", focal_series[idx].max())
+        stack = np.stack([p[0] for p in panels])
+        plot_kwargs.setdefault("vmin", stack.min())
+        plot_kwargs.setdefault("vmax", stack.max())
 
-    # no coordinates given -> pixel ticks on every panel are just clutter
     has_coords = any(plot_kwargs.get(k) is not None for k in ("x", "y", "extent"))
 
     fig, axes = plt.subplots(nrows, ncols,
@@ -161,14 +195,13 @@ def plot_focal_series(focal_series, defoci=None, ncols=None, step=1,
                              squeeze=False)
     axes = axes.ravel()
 
-    for ax, i in zip(axes, idx):
-        title = f"Δf = {defoci[i]:.0f}nm" if defoci is not None else f"#{i}"
-        plot_2d(focal_series[i], ax=ax, title=title, colorbar=False, **plot_kwargs)
+    for ax, (img, title) in zip(axes, panels):
+        plot_2d(img, ax=ax, title=title, colorbar=False, **plot_kwargs)
         if not has_coords:
             ax.set_xticks([])
             ax.set_yticks([])
 
-    for ax in axes[n:]:          # hide unused panels
+    for ax in axes[n:]:
         ax.axis("off")
 
     if suptitle:
