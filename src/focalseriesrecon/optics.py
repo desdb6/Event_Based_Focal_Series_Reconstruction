@@ -9,6 +9,7 @@ Last modified: 14/10/2026
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.constants import h, m_e, e, c
+from tqdm import tqdm
 
 from utils import plot_1d
 
@@ -112,7 +113,7 @@ def focal_series_astig(defoci_x: float, defoci_y: float, owf: np.ndarray, k_grid
     """Generate an astigmatic defocus series of images."""
     return np.stack([
             forward_nonlinear_astig(owf, k_grid, kx_grid, ky_grid, wavelength, dfx, dfy, cs, alpha_max)
-            for dfx, dfy in zip(defoci_x, defoci_y)
+            for dfx, dfy in tqdm(zip(defoci_x, defoci_y), desc="Generating astigmatism series")
         ])
 
 

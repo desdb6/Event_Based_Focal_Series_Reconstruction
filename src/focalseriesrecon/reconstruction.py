@@ -8,6 +8,7 @@ Last modified: 14/10/2026
 
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from optics import phase_error, ctf_complex, ctf_complex_astig, aperture_grid, fft2d, ifft2d
 from utils import *
@@ -41,13 +42,23 @@ def filter_function_approx_linear(defocus: float, defoci: np.ndarray, k_grid: np
 
 def filter_function_fbp(defocus_x: float, defocus_y: float, k_grid: np.ndarray, kx_grid: np.ndarray, ky_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float):
     """Generate a filtered backprojection kernel for an astigmatic image. (test, not sure about the generalisation of this expression)"""
-    return k_grid * np.conj(ctf_complex_astig(kx_grid, ky_grid, wavelength, defocus_x, defocus_y, cs)) * aperture_grid(k_grid, wavelength, alpha_max)
+    return np.abs(kx_grid) * np.abs(ky_grid) * np.conj(ctf_complex_astig(kx_grid, ky_grid, wavelength, defocus_x, defocus_y, cs)) * aperture_grid(k_grid, wavelength, alpha_max)
+
 
 def linear_reconstruction(defocus_series: np.ndarray, defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float, reg: float=1e-12) -> np.ndarray:
     """Linear reconstruction of defocus series"""
     filter_functions = np.stack([
         filter_function_linear(defocus, defoci, k_grid, wavelength, cs, alpha_max, reg)
         for defocus in defoci
+    ])
+    reconstructed_owf_g = np.sum(fft2d(defocus_series) * filter_functions, axis=0)
+    return ifft2d(reconstructed_owf_g) + 1
+
+def fbp_reconstruction(defocus_series: np.ndarray, defoci_x: np.ndarray, defoci_y: np.ndarray, k_grid: np.ndarray, kx_grid: np.ndarray, ky_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float):
+    """Filtered backprojection reconstruction of defocus series"""
+    filter_functions = np.stack([
+        filter_function_fbp(dfx, dfy, k_grid, kx_grid, ky_grid, wavelength, cs, alpha_max)
+        for dfx, dfy in tqdm(zip(defoci_x, defoci_y), desc="Generating filter functions")
     ])
     reconstructed_owf_g = np.sum(fft2d(defocus_series) * filter_functions, axis=0)
     return ifft2d(reconstructed_owf_g) + 1
