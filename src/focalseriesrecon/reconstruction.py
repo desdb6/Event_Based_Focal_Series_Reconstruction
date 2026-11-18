@@ -43,6 +43,7 @@ def filter_function_fbp(defocus_x: float, defocus_y: float, k_grid: np.ndarray, 
     """Generate a filtered backprojection kernel for an astigmatic image. (test, not sure about the generalisation of this expression)"""
     return k_grid * np.conj(ctf_complex_astig(kx_grid, ky_grid, wavelength, defocus_x, defocus_y, cs)) * aperture_grid(k_grid, wavelength, alpha_max)
 
+
 def linear_reconstruction(defocus_series: np.ndarray, defoci: np.ndarray, k_grid: np.ndarray, wavelength: float, cs: float, alpha_max: float, reg: float=1e-12) -> np.ndarray:
     """Linear reconstruction of defocus series"""
     filter_functions = np.stack([
